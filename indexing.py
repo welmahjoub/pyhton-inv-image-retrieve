@@ -1,0 +1,90 @@
+import string
+import os
+import sys
+import glob
+import cv2
+import numpy as np
+from timeit import default_timer as timer
+
+
+def index(db_name: string):
+    ## Set paths [TO UPDATE]
+    img_dir = "Images/" + db_name + "/"
+    imagesNameList = glob.glob(img_dir + "*.jpg")
+    output_dir = "./results/" + db_name
+
+    if not os.path.exists(img_dir):
+        print("The directory containing images: " + img_dir + " is not found -- EXIT\n")
+        sys.exit(1)
+
+    ####################
+    #### Compute descriptors of the whole database
+    ####################
+    dataBaseDescriptors = []
+    imageBaseIndex = []
+
+    im_nb = 0
+    des_nb = 0
+
+    ### Opencv 2.4.13
+    # sift = cv2.SIFT()
+    ### Opencv 3
+    sift = cv2.xfeatures2d.SIFT_create()
+
+    for imageName in imagesNameList:  # [:500]:
+        # print(str(im_nb + 1) + " Compute descriptors for : " + imageName)
+
+        image = cv2.imread(imageName)
+        kp, des = sift.detectAndCompute(image, None)
+
+        if des is not None:
+            for descriptor in des:
+                dataBaseDescriptors.append(descriptor)
+                imageBaseIndex.append(im_nb)
+                des_nb += 1
+
+        im_nb = im_nb + 1
+
+    print(str(im_nb) + " images in the DB")
+    print(str(des_nb) + " descriptors in the DB")
+
+    np.save(output_dir + "_DB_Descriptors.npy", dataBaseDescriptors)  # stores all the SIFT for all images
+    np.save(output_dir + "_imagesIndex.npy", imageBaseIndex)  # gives a number to each image
+    np.save(output_dir + "_imagesPaths.npy", imagesNameList)  # gives the path to each image
+
+    ####################
+    ### Index database descriptors
+    ####################
+
+    ## Load descriptors (if not in memory)
+    dataBaseDescriptors = np.load(output_dir + "_DB_Descriptors.npy")
+
+    # Algorithms
+    # 0 : FLANN_INDEX_LINEAR,
+    # 1 : FLANN_INDEX_KDTREE,
+
+    # No index. Subsequent sequential and exhaustive scan.
+    FLANN_INDEX_ALGO = 0
+    print("Creating LINEAR index")
+    start = timer()
+    index_params = dict(algorithm=FLANN_INDEX_ALGO)
+    ### Opencv 2.4.13
+    fl = cv2.flann_Index(np.asarray(dataBaseDescriptors, np.float32), index_params)
+    ### Opencv 3
+    # fl = cv2.flann.Index(np.asarray(dataBaseDescriptors, np.float32), index_params)
+    end = timer()
+    print("linear index created in: " + str(end - start))
+    fl.save(output_dir + "_flann_index-LINEAR.dat")
+
+    # KDtree index
+    FLANN_INDEX_ALGO = 1
+    print("\n\nCreating KDTREE index")
+    start = timer()
+    index_params = dict(algorithm=FLANN_INDEX_ALGO, trees=5)
+    ### Opencv 2.4.13
+    fl = cv2.flann_Index(np.asarray(dataBaseDescriptors, np.float32), index_params)
+    ### Opencv 3
+    # fl = cv2.flann.Index(np.asarray(dataBaseDescriptors, np.float32), index_params)
+    end = timer()
+    print("kdtree index descriptors: " + str(end - start))
+    fl.save(output_dir + "_flann_index-KDTREE.dat")
